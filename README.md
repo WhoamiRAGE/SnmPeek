@@ -1,16 +1,16 @@
 # snmpeek
 
-Terminal-based mini Network Management System (NMS). Yerli şəbəkəni ARP/ping ilə kəşf edir, SNMP dəstəkləyən cihazlardan əlavə məlumat (interfeyslər, LLDP/CDP qonşuları) toplayır və nəticəni Textual əsaslı TUI-də real-time topologiya xəritəsi kimi göstərir.
+Terminal-based mini Network Management System (NMS). Discovers hosts on the local network via ARP/ping, enriches SNMP-capable devices with additional data (interfaces, LLDP/CDP neighbors), and renders it all as a live topology map in a Textual-based TUI.
 
-## Xüsusiyyətlər (planlanan)
+## Features (planned)
 
-- **Discovery**: ARP scan (scapy) ilə subnetdəki canlı hostların aşkarlanması
-- **SNMP enrichment**: sysName, sysDescr, ifTable, mümkünsə LLDP/CDP qonşu cədvəli
-- **Topology graph**: networkx ilə qraf modeli, TUI-də vizual render
-- **Monitoring**: asyncio background polling, status dəyişikliklərinin SQLite-da tarixçəsi
-- **TUI**: Textual ilə device table + topology view + detail panel
+- **Discovery**: ARP scan (scapy) to find live hosts on the subnet
+- **SNMP enrichment**: sysName, sysDescr, ifTable, and LLDP/CDP neighbor tables where available
+- **Topology graph**: graph model built with networkx, rendered visually in the TUI
+- **Monitoring**: asyncio background polling, status history stored in SQLite
+- **TUI**: Textual-based device table + topology view + detail panel
 
-## Quraşdırma
+## Installation
 
 ```bash
 git clone https://github.com/WhoamiRAGE/snmpeek.git
@@ -19,12 +19,12 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 cp config.example.yaml config.yaml
-# config.yaml faylını öz subnetinə uyğun redaktə et
+# edit config.yaml to match your subnet
 ```
 
-> ARP scan üçün adətən root/sudo hüququ lazımdır (raw socket).
+> ARP scanning typically requires root/sudo (raw sockets).
 
-## İstifadə
+## Usage
 
 ```bash
 sudo python -m snmpeek.cli
@@ -32,8 +32,8 @@ sudo python -m snmpeek.cli
 
 ## Status
 
-Aktiv inkişafda. Bax [issues](https://github.com/WhoamiRAGE/snmpeek/issues).
+Actively in development. See [issues](https://github.com/WhoamiRAGE/snmpeek/issues).
 
-## Lisenziya
+## License
 
-MIT — bax [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).

@@ -1,22 +1,22 @@
-# topolens config
-# Bu faylı config.yaml adı ilə kopyala və öz şəbəkənə uyğun redaktə et.
+# snmpeek config
+# Copy this file to config.yaml and edit it to match your network.
 
 network:
-  subnet: "192.168.1.0/24"       # ARP scan üçün subnet
-  interface: null                 # null = avtomatik seç (scapy default route)
+  subnet: "192.168.1.0/24"       # subnet to ARP scan
+  interface: null                 # null = auto-detect (scapy default route)
 
 snmp:
   enabled: true
-  community: "public"             # ev routerlərində adətən dəyişdirilməli olur
+  community: "public"             # often needs to be changed on home routers
   port: 161
-  timeout: 1                      # saniyə
+  timeout: 1                      # seconds
   retries: 1
 
 monitor:
-  poll_interval: 30               # saniyə - hər N saniyədə bir yenidən scan
+  poll_interval: 30               # seconds - how often to re-scan
 
 storage:
-  db_path: "topolens.db"
+  db_path: "snmpeek.db"
 
 ui:
-  refresh_rate: 2                 # saniyə - TUI ekran yenilənməsi
+  refresh_rate: 2                 # seconds - TUI refresh rate
