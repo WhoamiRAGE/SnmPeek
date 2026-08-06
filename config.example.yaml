@@ -1,0 +1,22 @@
+# topolens config
+# Bu faylı config.yaml adı ilə kopyala və öz şəbəkənə uyğun redaktə et.
+
+network:
+  subnet: "192.168.1.0/24"       # ARP scan üçün subnet
+  interface: null                 # null = avtomatik seç (scapy default route)
+
+snmp:
+  enabled: true
+  community: "public"             # ev routerlərində adətən dəyişdirilməli olur
+  port: 161
+  timeout: 1                      # saniyə
+  retries: 1
+
+monitor:
+  poll_interval: 30               # saniyə - hər N saniyədə bir yenidən scan
+
+storage:
+  db_path: "topolens.db"
+
+ui:
+  refresh_rate: 2                 # saniyə - TUI ekran yenilənməsi

@@ -1,0 +1,6 @@
+scapy>=2.5.0
+pysnmp>=4.4.12,<5.0.0
+networkx>=3.2
+textual>=0.58.0
+pyyaml>=6.0
+sqlalchemy>=2.0
