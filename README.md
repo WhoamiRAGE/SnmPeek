@@ -27,8 +27,10 @@ cp config.example.yaml config.yaml
 ## Usage
 
 ```bash
-sudo python -m snmpeek.cli
+sudo venv/bin/python cli.py
 ```
+
+Controls: `r` to rescan immediately, `q` to quit. The subnet and poll interval are read from `config.yaml`.
 
 ## Status
 
