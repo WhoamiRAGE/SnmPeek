@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 
-from scapy.all import ARP, Ether, conf, srp
+from scapy.all import ARP, Ether, conf, get_if_addr, get_if_hwaddr, srp
 
 from core.device import Device
 
@@ -26,6 +26,29 @@ def _lookup_vendor(mac: str) -> str | None:
     return None
 
 
+def _get_local_device(interface: str | None) -> Device | None:
+    """Return a Device for this host's own interface.
+
+    A host generally doesn't reply to its own ARP broadcast, so arp_scan()
+    misses itself. We fill that gap here by reading the IP/MAC directly
+    off the interface instead of relying on a network round-trip.
+    """
+    iface = interface or conf.iface
+    try:
+        local_ip = get_if_addr(iface)
+        local_mac = get_if_hwaddr(iface)
+    except Exception:
+        logger.debug("Could not read local interface %s", iface, exc_info=True)
+        return None
+
+    if not local_ip or local_ip == "0.0.0.0":
+        return None
+
+    device = Device(ip=local_ip, mac=local_mac, vendor=_lookup_vendor(local_mac))
+    device.touch()
+    return device
+
+
 def arp_scan(subnet: str, interface: str | None = None, timeout: int = 2) -> list[Device]:
     """Send ARP requests to every host in `subnet` and return discovered devices.
 
@@ -36,7 +59,8 @@ def arp_scan(subnet: str, interface: str | None = None, timeout: int = 2) -> lis
         timeout: Seconds to wait for replies.
 
     Returns:
-        List of Device objects for every host that replied.
+        List of Device objects for every host that replied, plus this host
+        itself (which normally wouldn't answer its own ARP broadcast).
     """
     arp_request = ARP(pdst=subnet)
     broadcast = Ether(dst="ff:ff:ff:ff:ff:ff")
@@ -54,12 +78,18 @@ def arp_scan(subnet: str, interface: str | None = None, timeout: int = 2) -> lis
         ) from exc
 
     devices: list[Device] = []
+    seen_ips: set[str] = set()
     for _sent, received in answered:
         ip = received.psrc
         mac = received.hwsrc
         device = Device(ip=ip, mac=mac, vendor=_lookup_vendor(mac))
         device.touch()
         devices.append(device)
+        seen_ips.add(ip)
+
+    local_device = _get_local_device(interface)
+    if local_device and local_device.ip not in seen_ips:
+        devices.append(local_device)
 
     logger.info("ARP scan of %s found %d device(s)", subnet, len(devices))
     return devices
