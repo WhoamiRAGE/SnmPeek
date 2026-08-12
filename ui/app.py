@@ -94,7 +94,7 @@ class SnmpeekApp(App):
             retries=snmp_cfg["retries"],
         )
         try:
-            sys_info = await asyncio.to_thread(get_sys_info, device.ip, **kwargs)
+            sys_info = await get_sys_info(device.ip, **kwargs)
         except Exception:
             return
 
@@ -106,7 +106,7 @@ class SnmpeekApp(App):
         device.sys_descr = sys_info.get("sys_descr")
 
         try:
-            device.interfaces = await asyncio.to_thread(get_interfaces, device.ip, **kwargs)
+            device.interfaces = await get_interfaces(device.ip, **kwargs)
         except Exception:
             device.interfaces = []
 
