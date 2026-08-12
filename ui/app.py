@@ -11,6 +11,7 @@ from textual.widgets import DataTable, Footer, Header, Static
 
 from core.config import load_config
 from core.device import Device
+from core.topology import build_topology, detect_gateway_ip, render_tree
 from discovery.scanner import arp_scan
 from discovery.snmp_client import get_interfaces, get_sys_info
 from storage.db import get_history, init_db, upsert_device
@@ -38,6 +39,7 @@ class SnmpeekApp(App):
 
     BINDINGS = [
         ("r", "rescan", "Rescan now"),
+        ("t", "toggle_topology", "Topology"),
         ("q", "quit", "Quit"),
     ]
 
@@ -46,6 +48,8 @@ class SnmpeekApp(App):
         self.config = load_config(config_path)
         self.devices: dict[str, Device] = {}  # keyed by IP
         self.db = init_db(self.config["storage"]["db_path"])
+        self.gateway_ip: str | None = None
+        self.topology_mode: bool = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -73,6 +77,9 @@ class SnmpeekApp(App):
         subnet = self.config["network"]["subnet"]
         interface = self.config["network"]["interface"]
 
+        if self.gateway_ip is None:
+            self.gateway_ip = await asyncio.to_thread(detect_gateway_ip, interface)
+
         try:
             found = await asyncio.to_thread(arp_scan, subnet, interface)
         except PermissionError:
@@ -93,6 +100,9 @@ class SnmpeekApp(App):
 
         self._refresh_table()
         await asyncio.to_thread(self._persist_all)
+
+        if self.topology_mode:
+            self._show_topology()
 
         now = datetime.now().strftime("%H:%M:%S")
         status.update(f"Last scan: {now}  |  {len(self.devices)} device(s) known  |  subnet: {subnet}")
@@ -124,8 +134,21 @@ class SnmpeekApp(App):
         except Exception:
             device.interfaces = []
 
+    def action_toggle_topology(self) -> None:
+        self.topology_mode = not self.topology_mode
+        if self.topology_mode:
+            self._show_topology()
+        else:
+            self.query_one("#detail", Static).update("Select a device to see details.")
+
+    def _show_topology(self) -> None:
+        detail = self.query_one("#detail", Static)
+        graph = build_topology(self.devices, self.gateway_ip)
+        tree = render_tree(graph, self.devices, self.gateway_ip)
+        detail.update(f"[b]Topology[/b] (press 't' to go back to device details)\n\n{tree}")
+
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
-        if event.row_key.value is None:
+        if self.topology_mode or event.row_key.value is None:
             return
         self.run_worker(self._show_detail(str(event.row_key.value)), exclusive=True, group="detail")
 
