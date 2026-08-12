@@ -13,7 +13,7 @@ from core.config import load_config
 from core.device import Device
 from discovery.scanner import arp_scan
 from discovery.snmp_client import get_interfaces, get_sys_info
-from storage.db import init_db, upsert_device
+from storage.db import get_history, init_db, upsert_device
 
 
 class SnmpeekApp(App):
@@ -24,6 +24,15 @@ class SnmpeekApp(App):
         height: 1;
         padding: 0 1;
         color: $text-muted;
+    }
+    #device_table {
+        height: 1fr;
+    }
+    #detail {
+        height: auto;
+        max-height: 40%;
+        border-top: solid $primary;
+        padding: 1 2;
     }
     """
 
@@ -42,6 +51,7 @@ class SnmpeekApp(App):
         yield Header(show_clock=True)
         yield Static("Starting up...", id="status")
         yield DataTable(id="device_table")
+        yield Static("Select a device to see details.", id="detail")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -114,6 +124,40 @@ class SnmpeekApp(App):
         except Exception:
             device.interfaces = []
 
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        if event.row_key.value is None:
+            return
+        self.run_worker(self._show_detail(str(event.row_key.value)), exclusive=True, group="detail")
+
+    async def _show_detail(self, ip: str) -> None:
+        device = self.devices.get(ip)
+        detail = self.query_one("#detail", Static)
+        if device is None:
+            detail.update("Select a device to see details.")
+            return
+
+        lines = [f"[b]{device.display_name}[/b]  ({device.ip})  {device.mac or '-'}"]
+        if device.vendor:
+            lines.append(f"Vendor: {device.vendor}")
+        if device.snmp_enabled:
+            lines.append(f"SNMP: {device.sys_descr or '-'}")
+            if device.interfaces:
+                lines.append("Interfaces:")
+                for iface in device.interfaces:
+                    speed = f"{iface.speed_mbps} Mbps" if iface.speed_mbps else "-"
+                    lines.append(f"  [{iface.index}] {iface.name}  {iface.status}  {speed}  {iface.mac or ''}")
+        else:
+            lines.append("SNMP: not responding / disabled")
+
+        history = await asyncio.to_thread(get_history, self.db, ip, 5)
+        if history:
+            lines.append("Recent status changes:")
+            for row in history:
+                ts = row["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+                lines.append(f"  {ts}  ->  {row['status']}")
+
+        detail.update("\n".join(lines))
+
     def _persist_all(self) -> None:
         for device in self.devices.values():
             upsert_device(self.db, device)
@@ -130,6 +174,7 @@ class SnmpeekApp(App):
                 "yes" if device.snmp_enabled else "no",
                 device.status.value,
                 device.last_seen.strftime("%H:%M:%S"),
+                key=device.ip,
             )
 
 
