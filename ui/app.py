@@ -12,6 +12,7 @@ from textual.widgets import DataTable, Footer, Header, Static
 from core.config import load_config
 from core.device import Device
 from discovery.scanner import arp_scan
+from discovery.snmp_client import get_interfaces, get_sys_info
 
 
 class SnmpeekApp(App):
@@ -43,7 +44,7 @@ class SnmpeekApp(App):
 
     def on_mount(self) -> None:
         table = self.query_one("#device_table", DataTable)
-        table.add_columns("IP", "MAC", "Vendor", "Status", "Last Seen")
+        table.add_columns("IP", "MAC", "Vendor", "Hostname", "SNMP", "Status", "Last Seen")
         table.cursor_type = "row"
 
         interval = self.config["monitor"]["poll_interval"]
@@ -74,9 +75,40 @@ class SnmpeekApp(App):
         for device in found:
             self.devices[device.ip] = device
 
+        if self.config["snmp"]["enabled"]:
+            status.update(f"Scanned {len(found)} device(s), querying SNMP...")
+            await asyncio.gather(*(self._enrich_snmp(device) for device in found))
+
         self._refresh_table()
         now = datetime.now().strftime("%H:%M:%S")
         status.update(f"Last scan: {now}  |  {len(self.devices)} device(s) known  |  subnet: {subnet}")
+
+    async def _enrich_snmp(self, device: Device) -> None:
+        """Best-effort SNMP query for a single device. Silently leaves it
+        unenriched if there's no response (most consumer devices)."""
+        snmp_cfg = self.config["snmp"]
+        kwargs = dict(
+            community=snmp_cfg["community"],
+            port=snmp_cfg["port"],
+            timeout=snmp_cfg["timeout"],
+            retries=snmp_cfg["retries"],
+        )
+        try:
+            sys_info = await asyncio.to_thread(get_sys_info, device.ip, **kwargs)
+        except Exception:
+            return
+
+        if sys_info is None:
+            return
+
+        device.snmp_enabled = True
+        device.hostname = sys_info.get("sys_name") or device.hostname
+        device.sys_descr = sys_info.get("sys_descr")
+
+        try:
+            device.interfaces = await asyncio.to_thread(get_interfaces, device.ip, **kwargs)
+        except Exception:
+            device.interfaces = []
 
     def _refresh_table(self) -> None:
         table = self.query_one("#device_table", DataTable)
@@ -86,6 +118,8 @@ class SnmpeekApp(App):
                 device.ip,
                 device.mac or "-",
                 device.vendor or "-",
+                device.hostname or "-",
+                "yes" if device.snmp_enabled else "no",
                 device.status.value,
                 device.last_seen.strftime("%H:%M:%S"),
             )
