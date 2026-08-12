@@ -13,6 +13,7 @@ from core.config import load_config
 from core.device import Device
 from discovery.scanner import arp_scan
 from discovery.snmp_client import get_interfaces, get_sys_info
+from storage.db import init_db, upsert_device
 
 
 class SnmpeekApp(App):
@@ -35,6 +36,7 @@ class SnmpeekApp(App):
         super().__init__()
         self.config = load_config(config_path)
         self.devices: dict[str, Device] = {}  # keyed by IP
+        self.db = init_db(self.config["storage"]["db_path"])
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -80,6 +82,8 @@ class SnmpeekApp(App):
             await asyncio.gather(*(self._enrich_snmp(device) for device in found))
 
         self._refresh_table()
+        await asyncio.to_thread(self._persist_all)
+
         now = datetime.now().strftime("%H:%M:%S")
         status.update(f"Last scan: {now}  |  {len(self.devices)} device(s) known  |  subnet: {subnet}")
 
@@ -109,6 +113,10 @@ class SnmpeekApp(App):
             device.interfaces = await get_interfaces(device.ip, **kwargs)
         except Exception:
             device.interfaces = []
+
+    def _persist_all(self) -> None:
+        for device in self.devices.values():
+            upsert_device(self.db, device)
 
     def _refresh_table(self) -> None:
         table = self.query_one("#device_table", DataTable)
