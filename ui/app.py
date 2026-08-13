@@ -10,11 +10,12 @@ from textual.containers import Container
 from textual.widgets import DataTable, Footer, Header, Static
 
 from core.config import load_config
-from core.device import Device
+from core.device import Device, DeviceStatus
 from core.topology import build_topology, detect_gateway_ip, render_tree
 from discovery.scanner import arp_scan
 from discovery.snmp_client import get_interfaces, get_sys_info
 from storage.db import get_history, init_db, upsert_device
+from rich.text import Text
 
 
 class SnmpeekApp(App):
@@ -94,6 +95,11 @@ class SnmpeekApp(App):
         for device in found:
             self.devices[device.ip] = device
 
+        found_ips = {d.ip for d in found}
+        for ip, device in self.devices.items():
+            if ip not in found_ips:
+                device.status = DeviceStatus.DOWN
+
         if self.config["snmp"]["enabled"]:
             status.update(f"Scanned {len(found)} device(s), querying SNMP...")
             await asyncio.gather(*(self._enrich_snmp(device) for device in found))
@@ -105,7 +111,11 @@ class SnmpeekApp(App):
             self._show_topology()
 
         now = datetime.now().strftime("%H:%M:%S")
-        status.update(f"Last scan: {now}  |  {len(self.devices)} device(s) known  |  subnet: {subnet}")
+        down_count = sum(1 for d in self.devices.values() if d.status == DeviceStatus.DOWN)
+        down_note = f"  |  [bold red]{down_count} down[/bold red]" if down_count else ""
+        status.update(
+            f"Last scan: {now}  |  {len(self.devices)} device(s) known  |  subnet: {subnet}{down_note}"
+        )
 
     async def _enrich_snmp(self, device: Device) -> None:
         """Best-effort SNMP query for a single device. Silently leaves it
@@ -189,13 +199,20 @@ class SnmpeekApp(App):
         table = self.query_one("#device_table", DataTable)
         table.clear()
         for device in sorted(self.devices.values(), key=lambda d: tuple(int(o) for o in d.ip.split("."))):
+            if device.status == DeviceStatus.DOWN:
+                status_cell = Text(device.status.value, style="bold red")
+            elif device.status == DeviceStatus.UP:
+                status_cell = Text(device.status.value, style="green")
+            else:
+                status_cell = Text(device.status.value)
+
             table.add_row(
                 device.ip,
                 device.mac or "-",
                 device.vendor or "-",
                 device.hostname or "-",
                 "yes" if device.snmp_enabled else "no",
-                device.status.value,
+                status_cell,
                 device.last_seen.strftime("%H:%M:%S"),
                 key=device.ip,
             )
