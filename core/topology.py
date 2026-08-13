@@ -43,17 +43,23 @@ def build_topology(devices: dict[str, Device], gateway_ip: str | None) -> nx.DiG
     return graph
 
 
+def _label(dev: Device) -> str:
+    """Name without a duplicated (ip) suffix - display_name already adds
+    the ip itself when there's no hostname, so strip that case out here."""
+    return dev.hostname or dev.vendor or dev.ip
+
+
 def render_tree(graph: nx.DiGraph, devices: dict[str, Device], gateway_ip: str | None) -> str:
     """Render the topology as an indented ASCII tree for the TUI."""
     if not gateway_ip or gateway_ip not in devices:
         lines = ["Gateway not detected - showing flat device list:"]
         for ip in sorted(devices, key=lambda x: tuple(int(o) for o in x.split("."))):
             dev = devices[ip]
-            lines.append(f"  - {dev.display_name} ({dev.ip})  {dev.status.value}")
+            lines.append(f"  - {_label(dev)} ({dev.ip})  {dev.status.value}")
         return "\n".join(lines)
 
     root = devices[gateway_ip]
-    lines = [f"{root.display_name} ({root.ip})  [gateway]"]
+    lines = [f"{_label(root)} ({root.ip})  [gateway]"]
 
     children = sorted(
         graph.successors(gateway_ip),
@@ -62,7 +68,6 @@ def render_tree(graph: nx.DiGraph, devices: dict[str, Device], gateway_ip: str |
     for i, ip in enumerate(children):
         dev = devices[ip]
         branch = "└──" if i == len(children) - 1 else "├──"
-        label = dev.display_name if dev.display_name != dev.ip else dev.ip
-        lines.append(f"{branch} {label}  ({dev.ip})  {dev.status.value}")
+        lines.append(f"{branch} {_label(dev)}  ({dev.ip})  {dev.status.value}")
 
     return "\n".join(lines)
