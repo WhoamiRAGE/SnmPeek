@@ -21,8 +21,8 @@ _HISTORY_HEADERS = ["IP", "Status", "Timestamp"]
 def _autosize(ws, headers: list[str]) -> None:
     for i, header in enumerate(headers, start=1):
         col = get_column_letter(i)
-        max_len = max(len(header), *(len(str(c.value)) for c in ws[col][1:] if c.value is not None), default=len(header))
-        ws.column_dimensions[col].width = min(max_len + 2, 60)
+        lengths = [len(header)] + [len(str(c.value)) for c in ws[col][1:] if c.value is not None]
+        ws.column_dimensions[col].width = min(max(lengths) + 2, 60)
 
 
 def export_to_excel(engine: Engine, output_path: str) -> str:
