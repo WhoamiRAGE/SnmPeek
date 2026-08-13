@@ -13,7 +13,7 @@ from core.config import load_config
 from core.device import Device, DeviceStatus
 from core.topology import build_topology, detect_gateway_ip, render_tree
 from discovery.scanner import arp_scan
-from discovery.snmp_client import get_interfaces, get_neighbors, get_sys_info
+from discovery.snmp_client import build_auth, get_interfaces, get_neighbors, get_sys_info
 from storage.db import get_history, init_db, upsert_device
 from rich.text import Text
 
@@ -121,8 +121,9 @@ class SnmpeekApp(App):
         """Best-effort SNMP query for a single device. Silently leaves it
         unenriched if there's no response (most consumer devices)."""
         snmp_cfg = self.config["snmp"]
+        auth_data = build_auth(snmp_cfg)
         kwargs = dict(
-            community=snmp_cfg["community"],
+            auth_data=auth_data,
             port=snmp_cfg["port"],
             timeout=snmp_cfg["timeout"],
             retries=snmp_cfg["retries"],

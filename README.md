@@ -6,7 +6,7 @@ Terminal-based mini Network Management System (NMS). Discovers hosts on the loca
 ## Features
 
 - **Discovery**: ARP scan (scapy) finds every live host on the configured subnet, including the local machine itself
-- **SNMP enrichment**: pulls `sysName`, `sysDescr`, and the interface table (`ifDescr`, `ifOperStatus`, `ifSpeed`, `ifPhysAddress`) from any device with SNMP v2c enabled, via `pysnmp`'s asyncio hlapi
+- **SNMP enrichment**: pulls `sysName`, `sysDescr`, and the interface table (`ifDescr`, `ifOperStatus`, `ifSpeed`, `ifPhysAddress`) via `pysnmp`'s asyncio hlapi - supports both SNMPv2c (community string) and SNMPv3 (USM auth/privacy)
 - **Persistence**: every scan is upserted into SQLite; status transitions (up ↔ down) are logged to a history table
 - **Topology view**: real edges from LLDP/CDP neighbor data when available (matched by hostname), falling back to a star graph from the default gateway otherwise — rendered as an ASCII tree, press `t` to toggle
 - **Alerting**: devices that stop responding to ARP are marked `down` and highlighted in red, with a live down-count in the status bar
@@ -56,12 +56,10 @@ Your own host should then show up in the device table with `SNMP: yes` after a r
 
 ## Known limitations
 
-- SNMP is v2c only (no v3 auth/encryption)
 - Down-detection is based on missing from a single ARP scan pass, no debounce/threshold yet — a device that briefly doesn't answer will flash red
 
 ## Roadmap
 
-- SNMPv3 support
 - Export/report generation (e.g. to Excel via openpyxl)
 
 ## Status

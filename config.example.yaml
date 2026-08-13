@@ -7,10 +7,17 @@ network:
 
 snmp:
   enabled: true
-  community: "public"             # often needs to be changed on home routers
+  version: "2c"                   # "2c" or "3"
+  community: "public"             # used when version is "2c"; often needs to be changed on home routers
   port: 161
   timeout: 1                      # seconds
   retries: 1
+  v3:                              # only used when version is "3"
+    username: ""
+    auth_protocol: "sha"          # none, md5, sha
+    auth_key: ""
+    priv_protocol: "aes128"       # none, des, aes128
+    priv_key: ""
 
 monitor:
   poll_interval: 30               # seconds - how often to re-scan

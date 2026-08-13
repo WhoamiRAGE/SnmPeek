@@ -8,7 +8,21 @@ import yaml
 
 DEFAULTS = {
     "network": {"subnet": "192.168.1.0/24", "interface": None},
-    "snmp": {"enabled": True, "community": "public", "port": 161, "timeout": 1, "retries": 1},
+    "snmp": {
+        "version": "2c",
+        "enabled": True,
+        "community": "public",
+        "port": 161,
+        "timeout": 1,
+        "retries": 1,
+        "v3": {
+            "username": "",
+            "auth_protocol": "sha",   # none, md5, sha
+            "auth_key": "",
+            "priv_protocol": "aes128",  # none, des, aes128
+            "priv_key": "",
+        },
+    },
     "monitor": {"poll_interval": 30},
     "storage": {"db_path": "snmpeek.db"},
     "ui": {"refresh_rate": 2},
