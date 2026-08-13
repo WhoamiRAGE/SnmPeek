@@ -1,5 +1,6 @@
 # SnmPeek
 
+<img width="1920" height="1080" alt="IMG_20260813_102130_edit_2177308664769314" src="https://github.com/user-attachments/assets/c9c80dfd-6565-49fd-9438-e8b17f9d5714" />
 
 
 A terminal-based mini Network Management System (NMS) — the kind of tool a NOC engineer might reach for, built from scratch as a portfolio project.
