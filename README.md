@@ -1,14 +1,16 @@
 # snmpeek
 
-Terminal-based mini Network Management System (NMS). Discovers hosts on the local network via ARP/ping, enriches SNMP-capable devices with additional data (interfaces, LLDP/CDP neighbors), and renders it all as a live topology map in a Textual-based TUI.
+Terminal-based mini Network Management System (NMS). Discovers hosts on the local network via ARP scan, enriches SNMP-capable devices with additional data (sysName, sysDescr, interface table), tracks status history in SQLite, and renders it all live in a Textual-based TUI — device table, per-device detail panel, and a topology view.
 
-## Features (planned)
 
-- **Discovery**: ARP scan (scapy) to find live hosts on the subnet
-- **SNMP enrichment**: sysName, sysDescr, ifTable, and LLDP/CDP neighbor tables where available
-- **Topology graph**: graph model built with networkx, rendered visually in the TUI
-- **Monitoring**: asyncio background polling, status history stored in SQLite
-- **TUI**: Textual-based device table + topology view + detail panel
+## Features
+
+- **Discovery**: ARP scan (scapy) finds every live host on the configured subnet, including the local machine itself
+- **SNMP enrichment**: pulls `sysName`, `sysDescr`, and the interface table (`ifDescr`, `ifOperStatus`, `ifSpeed`, `ifPhysAddress`) from any device with SNMP v2c enabled, via `pysnmp`'s asyncio hlapi
+- **Persistence**: every scan is upserted into SQLite; status transitions (up ↔ down) are logged to a history table
+- **Topology view**: star-graph model (gateway detected via the OS routing table, everything else assumed one hop away) rendered as an ASCII tree — press `t` to toggle
+- **Alerting**: devices that stop responding to ARP are marked `down` and highlighted in red, with a live down-count in the status bar
+- **TUI**: Textual-based device table with a live-updating detail panel (interfaces + recent status history) as you move the cursor
 
 ## Installation
 
@@ -22,7 +24,7 @@ cp config.example.yaml config.yaml
 # edit config.yaml to match your subnet
 ```
 
-> ARP scanning typically requires root/sudo (raw sockets).
+> ARP scanning requires root/sudo (raw socket access).
 
 ## Usage
 
@@ -30,7 +32,39 @@ cp config.example.yaml config.yaml
 sudo venv/bin/python cli.py
 ```
 
-Controls: `r` to rescan immediately, `q` to quit. The subnet and poll interval are read from `config.yaml`.
+| Key | Action |
+|-----|--------|
+| `r` | Rescan immediately |
+| `t` | Toggle topology view |
+| `↑`/`↓` | Move cursor / update detail panel |
+| `q` | Quit |
+
+Subnet, poll interval, SNMP community string, and DB path are all read from `config.yaml` (see `config.example.yaml` for the full list of options).
+
+### Testing SNMP enrichment locally
+
+Most consumer routers ship with SNMP disabled. To see enrichment in action without a managed switch, run an SNMP agent on your own machine:
+
+```bash
+# Arch/CachyOS example
+sudo mkdir -p /etc/snmp
+echo "rocommunity public default" | sudo tee /etc/snmp/snmpd.conf
+sudo systemctl enable --now snmpd
+```
+
+Your own host should then show up in the device table with `SNMP: yes` after a rescan.
+
+## Known limitations
+
+- No LLDP/CDP support yet, so the topology view is an *approximation* (star graph from the default gateway), not the real physical wiring
+- SNMP is v2c only (no v3 auth/encryption)
+- Down-detection is based on missing from a single ARP scan pass, no debounce/threshold yet — a device that briefly doesn't answer will flash red
+
+## Roadmap
+
+- LLDP/CDP-based real topology discovery
+- SNMPv3 support
+- Export/report generation (e.g. to Excel via openpyxl)
 
 ## Status
 
