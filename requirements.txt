@@ -4,3 +4,4 @@ networkx>=3.2
 textual>=0.58.0
 pyyaml>=6.0
 sqlalchemy>=2.0
+openpyxl>=3.1

@@ -10,6 +10,7 @@ Terminal-based mini Network Management System (NMS). Discovers hosts on the loca
 - **Persistence**: every scan is upserted into SQLite; status transitions (up ↔ down) are logged to a history table
 - **Topology view**: real edges from LLDP/CDP neighbor data when available (matched by hostname), falling back to a star graph from the default gateway otherwise — rendered as an ASCII tree, press `t` to toggle
 - **Alerting**: devices that stop responding to ARP are marked `down` and highlighted in red, with a live down-count in the status bar
+- **Excel export**: dumps the current device table and full status history to a timestamped `.xlsx` (press `e`)
 - **TUI**: Textual-based device table with a live-updating detail panel (interfaces + recent status history) as you move the cursor
 
 ## Installation
@@ -36,6 +37,7 @@ sudo venv/bin/python cli.py
 |-----|--------|
 | `r` | Rescan immediately |
 | `t` | Toggle topology view |
+| `e` | Export devices + status history to `.xlsx` |
 | `↑`/`↓` | Move cursor / update detail panel |
 | `q` | Quit |
 
@@ -57,10 +59,6 @@ Your own host should then show up in the device table with `SNMP: yes` after a r
 ## Known limitations
 
 - Down-detection is based on missing from a single ARP scan pass, no debounce/threshold yet — a device that briefly doesn't answer will flash red
-
-## Roadmap
-
-- Export/report generation (e.g. to Excel via openpyxl)
 
 ## Status
 

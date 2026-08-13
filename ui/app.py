@@ -15,6 +15,7 @@ from core.topology import build_topology, detect_gateway_ip, render_tree
 from discovery.scanner import arp_scan
 from discovery.snmp_client import build_auth, get_interfaces, get_neighbors, get_sys_info
 from storage.db import get_history, init_db, upsert_device
+from storage.export import default_export_path, export_to_excel
 from rich.text import Text
 
 
@@ -41,6 +42,7 @@ class SnmpeekApp(App):
     BINDINGS = [
         ("r", "rescan", "Rescan now"),
         ("t", "toggle_topology", "Topology"),
+        ("e", "export", "Export xlsx"),
         ("q", "quit", "Quit"),
     ]
 
@@ -149,6 +151,19 @@ class SnmpeekApp(App):
             device.neighbors = await get_neighbors(device.ip, **kwargs)
         except Exception:
             device.neighbors = []
+
+    def action_export(self) -> None:
+        self.run_worker(self._export(), exclusive=True, group="export")
+
+    async def _export(self) -> None:
+        status = self.query_one("#status", Static)
+        path = default_export_path()
+        try:
+            await asyncio.to_thread(export_to_excel, self.db, path)
+        except Exception as exc:  # noqa: BLE001 - surface any export error in the UI
+            status.update(f"[red]Export failed: {exc}[/red]")
+            return
+        status.update(f"[green]Exported to {path}[/green]")
 
     def action_toggle_topology(self) -> None:
         self.topology_mode = not self.topology_mode
