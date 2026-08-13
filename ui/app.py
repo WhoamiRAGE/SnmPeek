@@ -13,7 +13,7 @@ from core.config import load_config
 from core.device import Device, DeviceStatus
 from core.topology import build_topology, detect_gateway_ip, render_tree
 from discovery.scanner import arp_scan
-from discovery.snmp_client import get_interfaces, get_sys_info
+from discovery.snmp_client import get_interfaces, get_neighbors, get_sys_info
 from storage.db import get_history, init_db, upsert_device
 from rich.text import Text
 
@@ -144,6 +144,11 @@ class SnmpeekApp(App):
         except Exception:
             device.interfaces = []
 
+        try:
+            device.neighbors = await get_neighbors(device.ip, **kwargs)
+        except Exception:
+            device.neighbors = []
+
     def action_toggle_topology(self) -> None:
         self.topology_mode = not self.topology_mode
         if self.topology_mode:
@@ -179,6 +184,8 @@ class SnmpeekApp(App):
                 for iface in device.interfaces:
                     speed = f"{iface.speed_mbps} Mbps" if iface.speed_mbps else "-"
                     lines.append(f"  [{iface.index}] {iface.name}  {iface.status}  {speed}  {iface.mac or ''}")
+            if device.neighbors:
+                lines.append(f"LLDP/CDP neighbors: {', '.join(device.neighbors)}")
         else:
             lines.append("SNMP: not responding / disabled")
 

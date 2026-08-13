@@ -1,9 +1,11 @@
-"""Simple star-topology model: gateway at the center, everything else a leaf.
+"""Topology model: real edges from LLDP/CDP when available, otherwise a
+star-graph approximation from the default gateway.
 
-Without LLDP/CDP data (most consumer gear doesn't speak it), we can't know
-the *real* physical wiring, so we approximate: every device is assumed to
-be one hop from the default gateway. This is enough to get a useful,
-readable picture on a typical home/small-office network.
+Most consumer gear doesn't speak LLDP/CDP, so the star fallback is what
+you'll see on a typical home network - it's still useful (one hop from
+the gateway is usually right), just not verified physical wiring. On
+managed switches/routers that do report neighbors, real edges are used
+and the star fallback is skipped entirely.
 """
 
 from __future__ import annotations
@@ -31,43 +33,67 @@ def detect_gateway_ip(interface: str | None = None) -> str | None:
     return None
 
 
+def _label(dev: Device) -> str:
+    return dev.hostname or dev.vendor or dev.ip
+
+
 def build_topology(devices: dict[str, Device], gateway_ip: str | None) -> nx.DiGraph:
-    """Build a star graph: gateway_ip -> every other known device."""
+    """Build the topology graph.
+
+    Prefers real LLDP/CDP-reported neighbor edges (device.neighbors, matched
+    by hostname). If no device reported any neighbors, falls back to a star
+    graph rooted at gateway_ip.
+    """
     graph = nx.DiGraph()
     for ip in devices:
         graph.add_node(ip)
-    if gateway_ip and gateway_ip in devices:
+
+    name_to_ip = {dev.hostname.lower(): ip for ip, dev in devices.items() if dev.hostname}
+
+    real_edges = False
+    for ip, dev in devices.items():
+        for neighbor_name in dev.neighbors:
+            neighbor_ip = name_to_ip.get(neighbor_name.lower())
+            if neighbor_ip and neighbor_ip != ip:
+                graph.add_edge(ip, neighbor_ip)
+                real_edges = True
+
+    if not real_edges and gateway_ip and gateway_ip in devices:
         for ip in devices:
             if ip != gateway_ip:
                 graph.add_edge(gateway_ip, ip)
+
     return graph
-
-
-def _label(dev: Device) -> str:
-    """Name without a duplicated (ip) suffix - display_name already adds
-    the ip itself when there's no hostname, so strip that case out here."""
-    return dev.hostname or dev.vendor or dev.ip
 
 
 def render_tree(graph: nx.DiGraph, devices: dict[str, Device], gateway_ip: str | None) -> str:
     """Render the topology as an indented ASCII tree for the TUI."""
-    if not gateway_ip or gateway_ip not in devices:
-        lines = ["Gateway not detected - showing flat device list:"]
+    if graph.number_of_edges() == 0:
+        lines = ["No topology data yet - showing flat device list:"]
         for ip in sorted(devices, key=lambda x: tuple(int(o) for o in x.split("."))):
             dev = devices[ip]
             lines.append(f"  - {_label(dev)} ({dev.ip})  {dev.status.value}")
         return "\n".join(lines)
 
-    root = devices[gateway_ip]
-    lines = [f"{_label(root)} ({root.ip})  [gateway]"]
+    root = gateway_ip if gateway_ip in graph.nodes else next(iter(graph.nodes))
+    root_dev = devices[root]
+    root_tag = "  [gateway]" if root == gateway_ip else ""
+    lines = [f"{_label(root_dev)} ({root_dev.ip}){root_tag}"]
 
-    children = sorted(
-        graph.successors(gateway_ip),
-        key=lambda x: tuple(int(o) for o in x.split(".")),
-    )
-    for i, ip in enumerate(children):
-        dev = devices[ip]
-        branch = "└──" if i == len(children) - 1 else "├──"
-        lines.append(f"{branch} {_label(dev)}  ({dev.ip})  {dev.status.value}")
+    visited = {root}
 
+    def walk(node: str, prefix: str) -> None:
+        children = sorted(
+            (n for n in graph.successors(node) if n not in visited),
+            key=lambda x: tuple(int(o) for o in x.split(".")),
+        )
+        for i, child in enumerate(children):
+            visited.add(child)
+            is_last = i == len(children) - 1
+            branch = "└── " if is_last else "├── "
+            dev = devices[child]
+            lines.append(f"{prefix}{branch}{_label(dev)}  ({dev.ip})  {dev.status.value}")
+            walk(child, prefix + ("    " if is_last else "│   "))
+
+    walk(root, "")
     return "\n".join(lines)

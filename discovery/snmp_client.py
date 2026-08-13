@@ -39,6 +39,32 @@ IF_PHYS_ADDRESS = "1.3.6.1.2.1.2.2.1.6"
 _OPER_STATUS_MAP = {1: "up", 2: "down", 3: "testing", 4: "unknown", 5: "dormant", 6: "not present", 7: "lower layer down"}
 
 
+async def _walk_column(ip: str, base_oid: str, community: str, port: int, timeout: int, retries: int) -> dict[str, str]:
+    """Walk a single SNMP table column, returning {index: value} keyed by the
+    trailing OID index (e.g. ifIndex, lldpRemIndex)."""
+    result: dict[str, str] = {}
+    try:
+        engine = SnmpEngine()
+        target = await UdpTransportTarget.create((ip, port), timeout=timeout, retries=retries)
+        async for error_indication, error_status, _error_index, var_binds in walk_cmd(
+            engine,
+            CommunityData(community, mpModel=1),
+            target,
+            ContextData(),
+            ObjectType(ObjectIdentity(base_oid)),
+            lexicographicMode=False,
+        ):
+            if error_indication or error_status:
+                break
+            for oid, value in var_binds:
+                index = str(oid).rsplit(".", 1)[-1]
+                result[index] = value.prettyPrint()
+        engine.close_dispatcher()
+    except Exception:
+        logger.debug("SNMP walk failed for %s (oid=%s)", ip, base_oid, exc_info=True)
+    return result
+
+
 async def get_sys_info(ip: str, community: str = "public", port: int = 161, timeout: int = 1, retries: int = 1) -> dict | None:
     """Fetch sysName and sysDescr via SNMP GET. Returns None if the device didn't respond."""
     try:
@@ -67,37 +93,14 @@ async def get_sys_info(ip: str, community: str = "public", port: int = 161, time
 
 async def get_interfaces(ip: str, community: str = "public", port: int = 161, timeout: int = 1, retries: int = 1) -> list[Interface]:
     """Walk the IF-MIB interface table and return a list of Interface objects."""
-    descrs: dict[str, str] = {}
-    statuses: dict[str, str] = {}
-    speeds: dict[str, int] = {}
-    macs: dict[str, str] = {}
+    kwargs = dict(community=community, port=port, timeout=timeout, retries=retries)
 
-    for base_oid, sink in (
-        (IF_DESCR, descrs),
-        (IF_OPER_STATUS, statuses),
-        (IF_SPEED, speeds),
-        (IF_PHYS_ADDRESS, macs),
-    ):
-        try:
-            engine = SnmpEngine()
-            target = await UdpTransportTarget.create((ip, port), timeout=timeout, retries=retries)
-            async for error_indication, error_status, _error_index, var_binds in walk_cmd(
-                engine,
-                CommunityData(community, mpModel=1),
-                target,
-                ContextData(),
-                ObjectType(ObjectIdentity(base_oid)),
-                lexicographicMode=False,
-            ):
-                if error_indication or error_status:
-                    break
-                for oid, value in var_binds:
-                    if_index = str(oid).rsplit(".", 1)[-1]
-                    sink[if_index] = value.prettyPrint()
-            engine.close_dispatcher()
-        except Exception:
-            logger.debug("SNMP ifTable walk failed for %s (oid=%s)", ip, base_oid, exc_info=True)
-            return []
+    descrs = await _walk_column(ip, IF_DESCR, **kwargs)
+    if not descrs:
+        return []
+    statuses = await _walk_column(ip, IF_OPER_STATUS, **kwargs)
+    speeds = await _walk_column(ip, IF_SPEED, **kwargs)
+    macs = await _walk_column(ip, IF_PHYS_ADDRESS, **kwargs)
 
     interfaces = []
     for if_index, name in descrs.items():
@@ -116,3 +119,29 @@ async def get_interfaces(ip: str, community: str = "public", port: int = 161, ti
         )
 
     return sorted(interfaces, key=lambda i: i.index)
+
+
+# LLDP-MIB (standard, vendor-neutral) and CISCO-CDP-MIB (Cisco-specific)
+# OIDs for neighbor discovery. Not supported by consumer routers, but common
+# on managed switches/routers in enterprise or lab environments.
+LLDP_REM_SYS_NAME = "1.0.8802.1.1.2.1.4.1.1.9"
+CDP_CACHE_DEVICE_ID = "1.3.6.1.4.1.9.9.23.1.2.1.1.6"
+
+
+async def get_neighbors(ip: str, community: str = "public", port: int = 161, timeout: int = 1, retries: int = 1) -> list[str]:
+    """Return neighbor device names/IDs via LLDP (preferred) or CDP.
+
+    Returns an empty list if the device doesn't support either (true for
+    almost all consumer gear) or has no neighbors reported.
+    """
+    kwargs = dict(community=community, port=port, timeout=timeout, retries=retries)
+
+    lldp_neighbors = await _walk_column(ip, LLDP_REM_SYS_NAME, **kwargs)
+    if lldp_neighbors:
+        return sorted(set(lldp_neighbors.values()))
+
+    cdp_neighbors = await _walk_column(ip, CDP_CACHE_DEVICE_ID, **kwargs)
+    if cdp_neighbors:
+        return sorted(set(cdp_neighbors.values()))
+
+    return []
